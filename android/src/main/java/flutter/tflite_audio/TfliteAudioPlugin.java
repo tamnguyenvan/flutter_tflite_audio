@@ -236,11 +236,16 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
     private void loadModel(HashMap arguments) throws IOException {
         tfliteModels = new ArrayList<Interpreter>();
 
+        // Get model file names and label file names from given arguments
+        // `model` should have format like "model1_path,model2_path"
+        // `label` should have format like "label1_path,label2_path"
         String[] modelList = arguments.get("model").toString().split(",");
         String label = arguments.get("label").toString();
         String[] labelList = label.split(",");
         Object isAssetObj = arguments.get("isAsset");
         boolean isAsset = isAssetObj == null ? false : (boolean) isAssetObj;
+
+        // Initialize tflite models
         for (int i = 0; i < modelList.length; i++) {
             String model = modelList[i];
 
@@ -262,16 +267,22 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
                 buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, declaredLength);
             }
 
+            // Actually initialize the model
             int numThreads = (int) arguments.get("numThreads");
             final Interpreter.Options tfliteOptions = new Interpreter.Options();
             tfliteOptions.setNumThreads(numThreads);
             Interpreter tflite = new Interpreter(buffer, tfliteOptions);
-            // tfLiteModels[i] = new Interpreter(buffer, tfliteOptions);
             tfliteModels.add(tflite);
         }
         //load labels
+        // After this step, `labels` would be like
+        // [
+        //    ["_silence_", "_unknown_", "class1", "class2"]
+        //    ["_silence_", "_unknown_", "class7", "class5"]
+        //    ...
+        //    ["_silence_", "_unknown_", "class7", "class5"]
+        // ]
         Log.d(LOG_TAG, "label name is: " + label);
-
         labels = new ArrayList<ArrayList<String>>();
         for (int i = 0; i < labelList.length; i++) {
             String key = null;
@@ -599,11 +610,12 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
         String inputShapeMsg = Arrays.toString(inputShape);
         Log.v(LOG_TAG, "Input shape: " + inputShapeMsg);
 
-        // TODO:
         outputRawScores = false;  // disable outputRawScores
+
+        // Record output scores and predicted labels of each models
         ArrayList<LabelSmoothing.RecognitionResult> resultList = new ArrayList<LabelSmoothing.RecognitionResult>();
 
-        //Used for multiple input and outputs (decodedWav)
+        // Make prediction one by one
         Map<String, Object> finalResults = new HashMap();
         for (int i = 0; i < tfliteModels.size(); i++) {
             //determine rawAudio or decodedWav input
@@ -697,6 +709,8 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
 
         }
 
+        // Aggregate the above predictions and get final result.
+        // We just pick the class has the highest score as the right class.
         finalResults.put("inferenceTime", lastProcessingTimeMs);
         finalResults.put("hasPermission", true);
         float maxScore = 0.f;
