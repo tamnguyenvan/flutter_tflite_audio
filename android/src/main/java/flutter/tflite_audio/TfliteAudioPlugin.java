@@ -74,10 +74,10 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
     private Thread recordingThread;
     private final ReentrantLock recordingBufferLock = new ReentrantLock();
 
-    //working label variables
+    // @tamnv working label variables
     private ArrayList<ArrayList<String>> labels;
 
-    //working recognition variables
+    // @tamnv working recognition variables
     boolean lastInferenceRun = false;
     private long lastProcessingTimeMs;
     private Thread recognitionThread;
@@ -236,7 +236,7 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
     private void loadModel(HashMap arguments) throws IOException {
         tfliteModels = new ArrayList<Interpreter>();
 
-        // Get model file names and label file names from given arguments
+        //  @tamnv Get model file names and label file names from given arguments
         // `model` should have format like "model1_path,model2_path"
         // `label` should have format like "label1_path,label2_path"
         String[] modelList = arguments.get("model").toString().split(",");
@@ -245,7 +245,7 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
         Object isAssetObj = arguments.get("isAsset");
         boolean isAsset = isAssetObj == null ? false : (boolean) isAssetObj;
 
-        // Initialize tflite models
+        //  @tamnv Initialize tflite models
         for (int i = 0; i < modelList.length; i++) {
             String model = modelList[i];
 
@@ -267,14 +267,14 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
                 buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, declaredLength);
             }
 
-            // Actually initialize the model
+            //  @tamnv Actually initialize the model
             int numThreads = (int) arguments.get("numThreads");
             final Interpreter.Options tfliteOptions = new Interpreter.Options();
             tfliteOptions.setNumThreads(numThreads);
             Interpreter tflite = new Interpreter(buffer, tfliteOptions);
             tfliteModels.add(tflite);
         }
-        //load labels
+        // @tamnv load labels
         // After this step, `labels` would be like
         // [
         //    ["_silence_", "_unknown_", "class1", "class2"]
@@ -605,17 +605,18 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
          if(events == null){
             throw new AssertionError("Events is null. Cannot start recognition");
         }
-
+        
+        // @tamnv Get input shape
         int[] inputShape = tfliteModels.get(0).getInputTensor(0).shape();
         String inputShapeMsg = Arrays.toString(inputShape);
         Log.v(LOG_TAG, "Input shape: " + inputShapeMsg);
 
         outputRawScores = false;  // disable outputRawScores
 
-        // Record output scores and predicted labels of each models
+        //  @tamnv Record output scores and predicted labels of each models
         ArrayList<LabelSmoothing.RecognitionResult> resultList = new ArrayList<LabelSmoothing.RecognitionResult>();
 
-        // Make prediction one by one
+        //  @tamnv Make prediction one by one
         Map<String, Object> finalResults = new HashMap();
         for (int i = 0; i < tfliteModels.size(); i++) {
             //determine rawAudio or decodedWav input
@@ -683,7 +684,8 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
                     for (int j = 0; j < recordingLength; ++j) {
                         floatInputBuffer[0][j] = inputBuffer[j] / 32767.0f;
                     }
-
+                    
+                    // @tamnv Actually run the model
                     tfliteModels.get(i).run(floatInputBuffer, floatOutputBuffer);
                     lastProcessingTimeMs = new Date().getTime() - startTime;
                 break;
@@ -704,12 +706,13 @@ public class TfliteAudioPlugin implements MethodCallHandler, StreamHandler, Flut
             long currentTime = System.currentTimeMillis();
             final LabelSmoothing.RecognitionResult recognitionResult =
                     labelSmoothing.processLatestResults(floatOutputBuffer[0], currentTime);
-            // finalResults.put("recognitionResult", recognitionResult.foundCommand);
+            
+            // @tamnv Save for further processing
             resultList.add(recognitionResult);
 
         }
 
-        // Aggregate the above predictions and get final result.
+        // @tamnv Aggregate the above predictions and get final result.
         // We just pick the class has the highest score as the right class.
         finalResults.put("inferenceTime", lastProcessingTimeMs);
         finalResults.put("hasPermission", true);
